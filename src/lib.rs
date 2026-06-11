@@ -15,7 +15,8 @@ pub enum BitcoinError {
 
 impl CompactSize {
     pub fn new(value: u64) -> Self {
-        // TODO: Construct a CompactSize from a u64 value
+        // Construct a CompactSize from a u64 value
+        CompactSize {value}
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -24,12 +25,48 @@ impl CompactSize {
         // [0xFDxxxx] => 0xFD + u16 (2 bytes)
         // [0xFExxxxxxxx] => 0xFE + u32 (4 bytes)
         // [0xFFxxxxxxxxxxxxxxxx] => 0xFF + u64 (8 bytes)
+        match self.value {
+            0..=252 => vec![self.value as u8],
+            253..=65535 => {
+                let mut bytes = vec![0xFD];
+                bytes.extend_from_slice(&(self.value as u16).to_le_bytes());
+                bytes
+            }
+            65536..=4294967295 => {
+                let mut bytes = vec![0xFE];
+                bytes.extend_from_slice(&(self.value as u32).to_le_bytes());
+                bytes
+            }
+            4294967296..=18446744073709551615 => {
+                let mut bytes = vec![0xFF];
+                bytes.extend_from_slice(&(self.value as u64).to_le_bytes())
+                bytes
+            }
+
+        }
+        
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Decode CompactSize, returning value and number of bytes consumed.
         // First check if bytes is empty.
         // Check that enough bytes are available based on prefix.
+        if bytes.is_empty(){
+            BitcoinError::InsufficientBytes
+        } 
+        else {
+            match bytes{
+                0..252 => Ok((CompactSize {value: bytes[0] as u64}, 1)),
+                0xFD => {
+                    if bytes.len() < 3 {
+                        return Err(BitcoinError::InsufficientBytes);
+                    }
+                    let value_bytes = [bytes[1], bytes[2]];
+                    let value = u16::from_le_bytes(value_bytes) as u64;
+                    
+                }
+        }
+
     }
 }
 
