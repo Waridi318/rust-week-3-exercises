@@ -99,6 +99,8 @@ impl Serialize for Txid {
         S: serde::Serializer,
     {
         // TODO: Serialize as a hex-encoded string (32 bytes => 64 hex characters)
+        let hex_string = hex::encode(&self.0);
+        serializer.serialize_str(&hex_string)
     }
 }
 
@@ -109,6 +111,22 @@ impl<'de> Deserialize<'de> for Txid {
     {
         // TODO: Parse hex string into 32-byte array
         // Use `hex::decode`, validate length = 32
+        let hex_string = String::deserialize(deserializer)?;
+        let bytes_vec = match hex::decode(hex_string) {
+            Ok(vec) => vec,
+            Err(e) => return Err(serde::de::Error::custom(e)),
+        }
+
+        if bytes_vec.len() != 32 {
+            return Err(serde::de::Error::custom("Invalid Length"));
+        }
+        let bytes_array = match bytes_vec.try_into() {
+            Ok(arr) => arr,
+            Err(_) => return Err(serde::de::Error::custom("Failed to convert"))
+        };
+
+        Ok(Txid(bytes_array))
+        
     }
 }
 
