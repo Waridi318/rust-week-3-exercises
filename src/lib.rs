@@ -39,7 +39,7 @@ impl CompactSize {
             }
             4294967296..=18446744073709551615 => {
                 let mut bytes = vec![0xFF];
-                bytes.extend_from_slice(&(self.value as u64).to_le_bytes());
+                bytes.extend_from_slice(&self.value.to_le_bytes());
                 bytes
             }
         }
@@ -101,7 +101,7 @@ impl Serialize for Txid {
         S: serde::Serializer,
     {
         // TODO: Serialize as a hex-encoded string (32 bytes => 64 hex characters)
-        let hex_string = hex::encode(&self.0);
+        let hex_string = hex::encode(self.0);
         serializer.serialize_str(&hex_string)
     }
 }
