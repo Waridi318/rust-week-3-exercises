@@ -39,7 +39,7 @@ impl CompactSize {
             }
             4294967296..=18446744073709551615 => {
                 let mut bytes = vec![0xFF];
-                bytes.extend_from_slice(&(self.value as u64).to_le_bytes())
+                bytes.extend_from_slice(&(self.value as u64).to_le_bytes());
                 bytes
             }
 
@@ -52,10 +52,10 @@ impl CompactSize {
         // First check if bytes is empty.
         // Check that enough bytes are available based on prefix.
         if bytes.is_empty(){
-            Err(BitcoinError::InsufficientBytes)
+            return Err(BitcoinError::InsufficientBytes);
         } 
-        match bytes{
-            0..252 => Ok((CompactSize {value: bytes[0] as u64}, 1)),
+        match bytes[0]{
+            0..=252 => Ok((CompactSize {value: bytes[0] as u64}, 1)),
             0xFD => {
                 if bytes.len() < 3 {
                     return Err(BitcoinError::InsufficientBytes);
@@ -63,7 +63,7 @@ impl CompactSize {
                 let value_bytes = [bytes[1], bytes[2]];
                 let value = u16::from_le_bytes(value_bytes) as u64;
 
-                Ok(CompactSize{value}, 3)                
+                Ok((CompactSize{value}, 3))
             }
             0xFE => {
                 if bytes.len() < 5 {
@@ -73,7 +73,7 @@ impl CompactSize {
                 let value_bytes = bytes[1..5].try_into().unwrap();
                 let value = u32::from_le_bytes(value_bytes) as u64;
 
-                Ok(CompactSize{value}, 5)
+                Ok((CompactSize{value}, 5))
             }
             0xFF => {
                 if bytes.len() < 9 {
@@ -83,7 +83,7 @@ impl CompactSize {
                 let value_bytes = bytes[1..9].try_into().unwrap();
                 let value = u64::from_le_bytes(value_bytes);
 
-                Ok(CompactSize{value}, 9)
+                Ok((CompactSize{value}, 9))
             }
         }
 
@@ -115,7 +115,7 @@ impl<'de> Deserialize<'de> for Txid {
         let bytes_vec = match hex::decode(hex_string) {
             Ok(vec) => vec,
             Err(e) => return Err(serde::de::Error::custom(e)),
-        }
+        };
 
         if bytes_vec.len() != 32 {
             return Err(serde::de::Error::custom("Invalid Length"));
@@ -139,7 +139,7 @@ impl OutPoint {
     pub fn new(txid: [u8; 32], vout: u32) -> Self {
         // TODO: Create an OutPoint from raw txid bytes and output index
         OutPoint {
-            txid,
+            txid: Txid(txid),
             vout
         }
     }
@@ -147,7 +147,7 @@ impl OutPoint {
     pub fn to_bytes(&self) -> Vec<u8> {
         // TODO: Serialize as: txid (32 bytes) + vout (4 bytes, little-endian)
         let mut bytes_vec = Vec::with_capacity(36);
-        bytes_vec.extend_from_slice(&self.txid);
+        bytes_vec.extend_from_slice(&self.txid.0);
         bytes_vec.extend_from_slice(&self.vout.to_le_bytes());
         bytes_vec
     }
@@ -158,7 +158,7 @@ impl OutPoint {
         if bytes.len() < 36{
             return Err(BitcoinError::InsufficientBytes);
         };
-        let txid = match bytes[0..32].try_into(){
+        let txid: [u8; 32] = match bytes[0..32].try_into(){
             Ok(arr) => arr,
             Err(_) => return Err(BitcoinError::InvalidFormat)
         };
@@ -169,10 +169,10 @@ impl OutPoint {
         };
 
         let vout = u32::from_le_bytes(vout_bytes);
-        Ok(OutPoint{
-            txid
-            vout
-        }, 36)
+        Ok((OutPoint{
+            txid: Txid(txid),
+            vout,
+        }, 36))
     }
 }
 
@@ -212,7 +212,7 @@ impl Script {
 
         let script_bytes = bytes[length..total_needed].to_vec();
 
-        Ok((Script {byte:script_bytes}, total_needed))
+        Ok((Script {bytes:script_bytes}, total_needed))
     }
 }
 
@@ -256,6 +256,8 @@ impl TransactionInput {
         // - OutPoint (36 bytes)
         // - Script (with CompactSize)
         // - Sequence (4 bytes)
+
+        let mut offset = 0;
         let(outpoint, outpoint_len) = match OutPoint::from_bytes(&bytes[offset..]){
             Ok((op, len)) => (op, len),
             Err(e) => return Err(e)
@@ -277,7 +279,8 @@ impl TransactionInput {
             Ok(arr) => arr,
             Err(_) => return Err(BitcoinError::InvalidFormat)
         };
-
+        let sequence = u32::from_le_bytes(sequence_bytes);
+        offset += 4;
         Ok((TransactionInput{
             previous_output: outpoint,
             script_sig,
@@ -341,7 +344,7 @@ impl BitcoinTransaction {
         let version = u32::from_le_bytes(version_bytes);
         offset +=4;
 
-        let(input_count_cs, cs_len) = CompactSize::from_bytes(&bytes[offset..]){
+        let(input_count_cs, cs_len) = match CompactSize::from_bytes(&bytes[offset..]){
             Ok((cs, len)) => (cs,len),
             Err(e) => return Err(e),
         };
@@ -387,7 +390,7 @@ impl fmt::Display for BitcoinTransaction {
         
         for (i, input) in self.inputs.iter().enumerate() {
             writeln!(f, "    Input {}: {{", i)?;
-            writeln!(f, "      Previous Output Txid: {}", hex::encode(input.previous_output.txid))?;
+            writeln!(f, "      Previous Output Txid: {}", hex::encode(input.previous_output.txid.0))?;
             writeln!(f, "      Previous Output Vout: {}", input.previous_output.vout)?;
             writeln!(f, "      ScriptSig: {} bytes, hex: {}", 
                 input.script_sig.len(),
