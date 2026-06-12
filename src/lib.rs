@@ -126,7 +126,6 @@ impl<'de> Deserialize<'de> for Txid {
         };
 
         Ok(Txid(bytes_array))
-        
     }
 }
 
@@ -139,15 +138,41 @@ pub struct OutPoint {
 impl OutPoint {
     pub fn new(txid: [u8; 32], vout: u32) -> Self {
         // TODO: Create an OutPoint from raw txid bytes and output index
+        OutPoint {
+            txid,
+            vout
+        }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         // TODO: Serialize as: txid (32 bytes) + vout (4 bytes, little-endian)
+        let mut bytes_vec = Vec::with_capacity(36);
+        bytes_vec.extend_from_slice(&self.txid);
+        bytes_vec.extend_from_slice(&self.vout.to_le_bytes());
+        bytes_vec
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Deserialize 36 bytes: txid[0..32], vout[32..36]
         // Return error if insufficient bytes
+        if bytes.len() < 36{
+            return Err(BitcoinError::InsufficientBytes);
+        };
+        let txid = match bytes[0..32].try_into(){
+            Ok(arr) => arr,
+            Err(_) => return Err(BitcoinError::InvalidFormat)
+        };
+
+        let vout_bytes = match bytes[32..36].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return Err(BitcoinError::InvalidFormat)
+        };
+
+        let vout = u32::from_le_bytes(vout_bytes);
+        Ok(OutPoint{
+            txid
+            vout
+        }, 36)
     }
 }
 
@@ -159,10 +184,16 @@ pub struct Script {
 impl Script {
     pub fn new(bytes: Vec<u8>) -> Self {
         // TODO: Simple constructor
+        Script{bytes}
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         // TODO: Prefix with CompactSize (length), then raw bytes
+        let length = CompactSize{value: self.bytes.len() as u64};
+        let prefix = length.to_bytes(); //this method was returning a vec
+        let mut result = prefix; //mutable vec to hold the result and concatenation
+        result.extend(&self.bytes);
+        result
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
