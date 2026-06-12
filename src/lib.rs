@@ -52,19 +52,39 @@ impl CompactSize {
         // First check if bytes is empty.
         // Check that enough bytes are available based on prefix.
         if bytes.is_empty(){
-            BitcoinError::InsufficientBytes
+            Err(BitcoinError::InsufficientBytes)
         } 
-        else {
-            match bytes{
-                0..252 => Ok((CompactSize {value: bytes[0] as u64}, 1)),
-                0xFD => {
-                    if bytes.len() < 3 {
-                        return Err(BitcoinError::InsufficientBytes);
-                    }
-                    let value_bytes = [bytes[1], bytes[2]];
-                    let value = u16::from_le_bytes(value_bytes) as u64;
-                    
+        match bytes{
+            0..252 => Ok((CompactSize {value: bytes[0] as u64}, 1)),
+            0xFD => {
+                if bytes.len() < 3 {
+                    return Err(BitcoinError::InsufficientBytes);
                 }
+                let value_bytes = [bytes[1], bytes[2]];
+                let value = u16::from_le_bytes(value_bytes) as u64;
+
+                Ok(CompactSize{value}, 3)                
+            }
+            0xFE => {
+                if bytes.len() < 5 {
+                    return Err(BitcoinError::InsufficientBytes)
+                }
+
+                let value_bytes = bytes[1..5].try_into().unwrap();
+                let value = u32::from_le_bytes(value_bytes) as u64;
+
+                Ok(CompactSize{value}, 5)
+            }
+            0xFF => {
+                if bytes.len() < 9 {
+                    return Err(BitcoinError::InsufficientBytes)
+                }
+
+                let value_bytes = bytes[1..9].try_into().unwrap();
+                let value = u64::from_le_bytes(value_bytes);
+
+                Ok(CompactSize{value}, 9)
+            }
         }
 
     }
